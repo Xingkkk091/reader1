@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="paper">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#F4EFE6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>MinimalReader 極簡文件閱覽器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<!-- 閱讀引擎:PDF / Markdown / 程式碼高亮(cdnjs,允許離線降級) -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root, [data-theme="paper"]{ --c-bg:#F4EFE6; --c-surface:#FCFAF4; --c-ink:#2B2723; --c-muted:#938A7C; --c-line:#E3DCCD; --c-accent:#C2613F; --grain:.04; }
+  [data-theme="dark"]{ --c-bg:#1B1916; --c-surface:#262320; --c-ink:#ECE6DA; --c-muted:#9A9082; --c-line:#36322C; --c-accent:#E0855F; --grain:.06; }
+  [data-theme="sepia"]{ --c-bg:#E8DCC4; --c-surface:#F3E9D4; --c-ink:#43382A; --c-muted:#9C8B6F; --c-line:#D8C7A6; --c-accent:#A8642C; --grain:.05; }
+
+  *,*::before,*::after{ box-sizing:border-box; margin:0; padding:0; }
+  html{ -webkit-tap-highlight-color:transparent; }
+  body{
+    font-family:'Noto Sans TC',system-ui,sans-serif; color:var(--c-ink);
+    min-height:100dvh; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+    background:radial-gradient(120% 80% at 100% 0%, color-mix(in srgb,var(--c-accent) 7%,transparent), transparent 60%), var(--c-bg);
+    transition:background-color .4s ease,color .4s ease;
+  }
+  body::before{ content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:var(--grain);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  .wrap{ position:relative; z-index:10; max-width:28rem; margin:0 auto; padding:1.5rem 1.25rem 4rem; }
+  .head{ display:flex; align-items:center; justify-content:space-between; }
+  .brand-name{ font-family:'Fraunces','Noto Serif TC',serif; font-size:1.5rem; font-weight:900; letter-spacing:-.02em; line-height:1; }
+  .brand-sub{ font-family:'Noto Serif TC',serif; font-size:13px; font-weight:500; color:var(--c-muted); margin-top:.3rem; }
+  .icon-btn{ display:grid; place-items:center; height:2.75rem; width:2.75rem; font-size:1.15rem; border-radius:999px; border:1px solid var(--c-line); background:var(--c-surface); transition:transform .15s ease; }
+  .icon-btn:active{ transform:scale(.9); }
+  .greet{ font-family:'Noto Serif TC',serif; font-size:15px; color:var(--c-muted); margin-top:1.75rem; }
+
+  .section{ margin-top:1.5rem; }
+  .sec-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.75rem; }
+  .title{ font-family:'Noto Serif TC',serif; font-size:1rem; font-weight:700; }
+  .note{ font-size:.75rem; color:var(--c-muted); }
+  .stack{ display:flex; flex-direction:column; gap:.75rem; }
+
+  .bento{ width:100%; text-align:left; background:var(--c-surface); border:1px solid var(--c-line); border-radius:1.4rem;
+    box-shadow:0 1px 0 color-mix(in srgb,var(--c-ink) 4%,transparent), 0 14px 30px -22px color-mix(in srgb,var(--c-ink) 30%,transparent); transition:transform .18s ease; }
+  .bento:active{ transform:scale(.985); }
+
+  .card{ padding:1rem; }
+  .card-row{ display:flex; align-items:center; gap:.75rem; }
+  .badge{ display:grid; place-items:center; height:2.75rem; width:2.75rem; flex-shrink:0; border-radius:.75rem; font-weight:700; font-size:11px; letter-spacing:.06em; }
+  .b-pdf{ background:color-mix(in srgb,var(--c-accent) 14%,transparent); color:var(--c-accent); }
+  .b-md{ background:rgba(80,130,170,.16); color:#5b88ad; }
+  .b-code{ background:rgba(90,150,110,.20); color:#5a966e; }
+  .b-txt{ background:color-mix(in srgb,var(--c-ink) 8%,transparent); color:var(--c-muted); }
+  .card-mid{ min-width:0; flex:1; }
+  .card-name{ font-weight:500; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card-meta{ font-size:.75rem; color:var(--c-muted); margin-top:.15rem; }
+  .pct{ font-size:.875rem; font-weight:600; color:var(--c-accent); }
+  .prog{ margin-top:.75rem; height:.375rem; width:100%; border-radius:99px; background:color-mix(in srgb,var(--c-accent) 16%,transparent); overflow:hidden; }
+  .prog>i{ display:block; height:100%; border-radius:99px; background:var(--c-accent); width:0; }
+
+  .import{ padding:1.75rem 1.25rem; border-style:dashed; border-width:1.6px; }
+  .import.drag{ border-color:var(--c-accent); background:color-mix(in srgb,var(--c-accent) 8%,var(--c-surface)); }
+  .import-inner{ display:flex; flex-direction:column; align-items:center; text-align:center; pointer-events:none; }
+  .plus{ display:grid; place-items:center; height:3.5rem; width:3.5rem; border-radius:1rem; font-size:1.5rem; background:color-mix(in srgb,var(--c-accent) 12%,transparent); color:var(--c-accent); }
+  .import-title{ font-family:'Noto Serif TC',serif; font-size:1rem; font-weight:700; margin-top:.75rem; }
+  .import-sub{ font-size:.75rem; color:var(--c-muted); margin-top:.25rem; }
+  .chips{ display:flex; flex-wrap:wrap; justify-content:center; gap:.375rem; margin-top:.75rem; }
+  .chip{ font-size:11px; color:var(--c-muted); border:1px solid var(--c-line); border-radius:999px; padding:.25rem .65rem; }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+  .cat{ padding:1.25rem 1rem; }
+  .cat-ico{ font-size:1.5rem; }
+  .cat-name{ font-weight:500; font-size:15px; margin-top:.75rem; }
+  .cat-count{ font-size:.75rem; color:var(--c-muted); margin-top:.15rem; }
+  .foot{ text-align:center; font-size:11px; color:var(--c-muted); margin-top:2.5rem; }
+  .empty{ text-align:center; color:var(--c-muted); font-size:.85rem; padding:1.5rem 0; }
+
+  /* ---- Reader ---- */
+  #view-reader{ position:fixed; inset:0; z-index:50; background:var(--c-bg); display:none; flex-direction:column; }
+  #view-reader.active{ display:flex; }
+  .topbar{ position:relative; z-index:5; display:flex; align-items:center; gap:.4rem; padding:max(.5rem,env(safe-area-inset-top)) .6rem .5rem; padding-top:calc(.5rem + env(safe-area-inset-top)); background:color-mix(in srgb,var(--c-surface) 92%,transparent); border-bottom:1px solid var(--c-line); transition:transform .3s ease,opacity .3s ease; }
+  .topbar .r-title{ flex:1; min-width:0; font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tbtn{ display:grid; place-items:center; height:2.5rem; min-width:2.5rem; padding:0 .55rem; border-radius:.7rem; font-size:1.05rem; }
+  .tbtn:active{ background:color-mix(in srgb,var(--c-ink) 8%,transparent); }
+  .tbtn.txt{ font-size:.85rem; font-weight:600; }
+  .rprog{ height:2px; background:var(--c-accent); width:0; transition:width .1s linear; }
+  .doc-scroll{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .doc{ max-width:42rem; margin:0 auto; padding:1.5rem 1.35rem 6rem; font-size:var(--rfs,18px); line-height:1.85; }
+  .doc.serif{ font-family:'Noto Serif TC',serif; }
+  .immersive .topbar{ transform:translateY(-100%); opacity:0; pointer-events:none; }
+
+  /* document typography */
+  .doc h1,.doc h2,.doc h3,.doc h4{ font-family:'Noto Serif TC',serif; line-height:1.4; margin:1.4em 0 .6em; }
+  .doc h1{ font-size:1.5em; } .doc h2{ font-size:1.3em; } .doc h3{ font-size:1.12em; }
+  .doc p{ margin:0 0 1em; }
+  .doc ul,.doc ol{ margin:0 0 1em 1.4em; } .doc li{ margin:.25em 0; }
+  .doc blockquote{ margin:0 0 1em; padding:.4em 1em; border-left:3px solid var(--c-accent); color:var(--c-muted); }
+  .doc hr{ border:none; border-top:1px solid var(--c-line); margin:1.6em 0; }
+  .doc a{ color:var(--c-accent); }
+  .doc img{ max-width:100%; border-radius:.6rem; }
+  .doc code{ font-family:ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace; font-size:.9em; background:color-mix(in srgb,var(--c-ink) 7%,transparent); padding:.1em .35em; border-radius:.35em; }
+  .doc pre{ background:color-mix(in srgb,var(--c-ink) 6%,transparent); border:1px solid var(--c-line); border-radius:.8rem; padding:1em; overflow-x:auto; margin:0 0 1em; }
+  .doc pre code{ background:none; padding:0; font-size:.85em; line-height:1.6; white-space:pre; }
+  .doc.wrapcode pre code{ white-space:pre-wrap; word-break:break-word; }
+  .doc.plain{ white-space:pre-wrap; word-break:break-word; font-family:'Noto Serif TC',serif; }
+  .doc.mono{ white-space:pre; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:calc(var(--rfs,18px) - 3px); line-height:1.6; overflow-x:auto; }
+  .doc.mono.wrapcode{ white-space:pre-wrap; word-break:break-word; }
+
+  /* pdf */
+  .pdf-page{ position:relative; margin:0 auto 14px; max-width:100%; background:#fff; box-shadow:0 4px 18px -10px rgba(0,0,0,.5); }
+  .pdf-page canvas{ display:block; width:100%; height:auto; }
+  .loadmsg{ text-align:center; color:var(--c-muted); font-size:.85rem; padding:2rem 1rem; }
+
+  /* toast */
+  #toast{ position:fixed; left:50%; bottom:calc(1.5rem + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px); z-index:90; background:var(--c-ink); color:var(--c-bg); font-size:.8rem; padding:.6rem 1rem; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .25s,transform .25s; max-width:88vw; text-align:center; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ============ HOME ============ -->
+<div id="view-home" class="view active">
+  <div class="wrap">
+    <header class="head">
+      <div>
+        <div class="brand-name">MinimalReader</div>
+        <div class="brand-sub">極簡文件閱覽器</div>
+      </div>
+      <button id="themeBtn" class="icon-btn" aria-label="切換主題"><span id="themeIcon">☾</span></button>
+    </header>
+
+    <p class="greet" id="greet">歡迎回來,挑一份文件繼續閱讀吧。</p>
+
+    <section class="section" id="recentSec">
+      <div class="sec-head"><h2 class="title">最近閱讀</h2><span class="note">繼續上次的進度</span></div>
+      <div class="stack" id="recentList"></div>
+    </section>
+
+    <section class="section">
+      <button class="bento import" id="importZone">
+        <div class="import-inner">
+          <span class="plus">＋</span>
+          <div class="import-title">導入文件</div>
+          <div class="import-sub">點擊選取,或拖放檔案到此處</div>
+          <div class="chips"><span class="chip">PDF</span><span class="chip">Markdown</span><span class="chip">TXT</span><span class="chip">程式碼</span></div>
+        </div>
+      </button>
+      <input type="file" id="fileInput" multiple accept=".pdf,.md,.markdown,.txt,.text,.log,.js,.ts,.jsx,.tsx,.py,.html,.htm,.css,.json,.java,.c,.cpp,.h,.go,.rs,.rb,.php,.sh,.xml,.yml,.yaml,.sql,.kt,.swift" hidden>
+    </section>
+
+    <section class="section">
+      <h2 class="title" style="margin-bottom:.75rem">文件分類</h2>
+      <div class="grid2" id="catGrid">
+        <button class="bento cat" data-cat="pdf"><span class="cat-ico">📄</span><div class="cat-name">PDF</div><div class="cat-count" data-count="pdf">0 份文件</div></button>
+        <button class="bento cat" data-cat="md"><span class="cat-ico">📝</span><div class="cat-name">Markdown</div><div class="cat-count" data-count="md">0 份文件</div></button>
+        <button class="bento cat" data-cat="txt"><span class="cat-ico">📃</span><div class="cat-name">純文字</div><div class="cat-count" data-count="txt">0 份文件</div></button>
+        <button class="bento cat" data-cat="code"><span class="cat-ico">💻</span><div class="cat-name">程式碼</div><div class="cat-count" data-count="code">0 份文件</div></button>
+      </div>
+    </section>
+
+    <footer class="foot">100% 在地端運行 · 你的文件不離開這台裝置</footer>
+  </div>
+</div>
+
+<!-- ============ LIST ============ -->
+<div id="view-list" class="view">
+  <div class="wrap">
+    <header class="head">
+      <button class="icon-btn" id="listBack" aria-label="返回">‹</button>
+      <div class="title" id="listTitle" style="flex:1;text-align:center"></div>
+      <span style="width:2.75rem"></span>
+    </header>
+    <div class="stack" id="listItems" style="margin-top:1.5rem"></div>
+  </div>
+</div>
+
+<!-- ============ READER ============ -->
+<div id="view-reader" class="view">
+  <div class="topbar" id="rtopbar">
+    <button class="tbtn" id="rBack" aria-label="返回">‹</button>
+    <div class="r-title" id="rTitle"></div>
+    <button class="tbtn" id="rPdfMode" aria-label="文字模式" hidden>⠿</button>
+    <button class="tbtn txt" id="rFsDown" aria-label="縮小字級">A−</button>
+    <button class="tbtn txt" id="rFsUp" aria-label="放大字級">A＋</button>
+    <button class="tbtn" id="rTheme" aria-label="主題">◐</button>
+    <button class="tbtn" id="rDelete" aria-label="刪除">🗑</button>
+  </div>
+  <div class="rprog" id="rprog"></div>
+  <div class="doc-scroll" id="docScroll"><div class="doc" id="doc"></div></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   MinimalReader — 核心邏輯(單檔、在地端)
+   ========================================================= */
+(function () {
+  "use strict";
+
+  /* ---------- 工具 ---------- */
+  var $ = function (id) { return document.getElementById(id); };
+  var toastT;
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 2200);
+  }
+  function escapeHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function fmtTime(ts){
+    if(!ts) return "";
+    var d=(Date.now()-ts)/1000;
+    if(d<60) return "剛剛";
+    if(d<3600) return Math.floor(d/60)+" 分鐘前";
+    if(d<86400) return Math.floor(d/3600)+" 小時前";
+    return Math.floor(d/86400)+" 天前";
+  }
+  function typeOf(name){
+    var ext=(name.split(".").pop()||"").toLowerCase();
+    if(ext==="pdf") return "pdf";
+    if(ext==="md"||ext==="markdown") return "md";
+    if(["txt","text","log"].indexOf(ext)>=0) return "txt";
+    if(["js","ts","jsx","tsx","py","html","htm","css","json","java","c","cpp","h","go","rs","rb","php","sh","xml","yml","yaml","sql","kt","swift"].indexOf(ext)>=0) return "code";
+    return "txt";
+  }
+  var BADGE={pdf:["PDF","b-pdf"],md:["MD","b-md"],txt:["TXT","b-txt"],code:["{ }","b-code"]};
+  var CATNAME={pdf:"PDF",md:"Markdown",txt:"純文字",code:"程式碼"};
+
+  /* ---------- 儲存層:IndexedDB + 記憶體容錯 ---------- */
+  var DB=null, memStore={files:{}, meta:{}}, useMem=false, uid=0;
+  function openDB(){
+    return new Promise(function(res){
+      try{
+        if(!window.indexedDB){ useMem=true; return res(); }
+        var rq=indexedDB.open("minimalreader",1);
+        rq.onupgradeneeded=function(e){
+          var db=e.target.result;
+          if(!db.objectStoreNames.contains("files")) db.createObjectStore("files",{keyPath:"id"});
+          if(!db.objectStoreNames.contains("meta")) db.createObjectStore("meta",{keyPath:"k"});
+        };
+        rq.onsuccess=function(e){ DB=e.target.result; res(); };
+        rq.onerror=function(){ useMem=true; res(); };
+      }catch(err){ useMem=true; res(); }
+    });
+  }
+  function tx(store,mode){ return DB.transaction(store,mode).objectStore(store); }
+  function putFile(rec){
+    return new Promise(function(res){
+      if(useMem){ memStore.files[rec.id]=rec; return res(); }
+      try{ var r=tx("files","readwrite").put(rec); r.onsuccess=function(){res();}; r.onerror=function(){ memStore.files[rec.id]=rec; res(); }; }
+      catch(e){ memStore.files[rec.id]=rec; res(); }
+    });
+  }
+  function getFile(id){
+    return new Promise(function(res){
+      if(useMem) return res(memStore.files[id]||null);
+      try{ var r=tx("files","readonly").get(id); r.onsuccess=function(){res(r.result||null);}; r.onerror=function(){res(null);}; }
+      catch(e){ res(null); }
+    });
+  }
+  function allFiles(){
+    return new Promise(function(res){
+      if(useMem) return res(Object.keys(memStore.files).map(function(k){return memStore.files[k];}));
+      try{ var r=tx("files","readonly").getAll(); r.onsuccess=function(){res(r.result||[]);}; r.onerror=function(){res([]);}; }
+      catch(e){ res([]); }
+    });
+  }
+  function delFile(id){
+    return new Promise(function(res){
+      delete memStore.files[id];
+      if(useMem) return res();
+      try{ var r=tx("files","readwrite").delete(id); r.onsuccess=function(){res();}; r.onerror=function(){res();}; }
+      catch(e){ res(); }
+    });
+  }
+  function setMeta(k,v){
+    return new Promise(function(res){
+      memStore.meta[k]=v;
+      if(useMem) return res();
+      try{ var r=tx("meta","readwrite").put({k:k,v:v}); r.onsuccess=function(){res();}; r.onerror=function(){res();}; }
+      catch(e){ res(); }
+    });
+  }
+  function getMeta(k){
+    return new Promise(function(res){
+      if(useMem) return res(memStore.meta[k]);
+      try{ var r=tx("meta","readonly").get(k); r.onsuccess=function(){res(r.result?r.result.v:undefined);}; r.onerror=function(){res(undefined);}; }
+      catch(e){ res(undefined); }
+    });
+  }
+
+  /* ---------- 主題 ---------- */
+  var THEMES=["paper","dark","sepia"], ICON={paper:"☾",dark:"☀",sepia:"❦"}, METAC={paper:"#F4EFE6",dark:"#1B1916",sepia:"#E8DCC4"};
+  function applyTheme(t){
+    document.documentElement.dataset.theme=t;
+    $("themeIcon").textContent=ICON[t];
+    document.querySelector('meta[name=theme-color]').setAttribute("content",METAC[t]);
+    setMeta("theme",t);
+  }
+  function cycleTheme(){
+    var cur=document.documentElement.dataset.theme;
+    applyTheme(THEMES[(THEMES.indexOf(cur)+1)%THEMES.length]);
+  }
+  $("themeBtn").addEventListener("click",cycleTheme);
+  $("rTheme").addEventListener("click",cycleTheme);
+
+  /* ---------- 字級 ---------- */
+  var fontSize=18;
+  function applyFs(){ document.documentElement.style.setProperty("--rfs",fontSize+"px"); }
+  $("rFsUp").addEventListener("click",function(){ fontSize=Math.min(30,fontSize+2); applyFs(); setMeta("fontSize",fontSize); });
+  $("rFsDown").addEventListener("click",function(){ fontSize=Math.max(12,fontSize-2); applyFs(); setMeta("fontSize",fontSize); });
+
+  /* ---------- 視圖切換 ---------- */
+  function show(view){
+    ["home","list","reader"].forEach(function(v){ $("view-"+v).classList.toggle("active",v===view); });
+  }
+
+  /* ---------- 匯入檔案 ---------- */
+  function readText(file){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){res(r.result);}; r.onerror=rej; r.readAsText(file,"UTF-8"); }); }
+  function readBuf(file){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){res(r.result);}; r.onerror=rej; r.readAsArrayBuffer(file); }); }
+
+  function importFiles(fileList){
+    var files=Array.prototype.slice.call(fileList||[]);
+    if(!files.length) return;
+    var chain=Promise.resolve(), added=0;
+    files.forEach(function(f){
+      chain=chain.then(function(){
+        var t=typeOf(f.name);
+        var rec={ id:"f"+Date.now()+"_"+(uid++), name:f.name, type:t, size:f.size, addedAt:Date.now(), lastOpened:0, progress:0 };
+        var read=(t==="pdf")?readBuf(f):readText(f);
+        return read.then(function(content){
+          rec.content=content;
+          return putFile(rec).then(function(){ added++; });
+        });
+      }).catch(function(){ toast("無法讀取:"+f.name); });
+    });
+    chain.then(function(){ if(added) toast("已導入 "+added+" 份文件"); renderHome(); });
+  }
+  $("importZone").addEventListener("click",function(){ $("fileInput").click(); });
+  $("fileInput").addEventListener("change",function(e){ importFiles(e.target.files); e.target.value=""; });
+  ["dragenter","dragover"].forEach(function(ev){ $("importZone").addEventListener(ev,function(e){ e.preventDefault(); $("importZone").classList.add("drag"); }); });
+  ["dragleave","drop"].forEach(function(ev){ $("importZone").addEventListener(ev,function(e){ e.preventDefault(); $("importZone").classList.remove("drag"); }); });
+  $("importZone").addEventListener("drop",function(e){ if(e.dataTransfer&&e.dataTransfer.files) importFiles(e.dataTransfer.files); });
+
+  /* ---------- 首頁 ---------- */
+  function cardHtml(f){
+    var b=BADGE[f.type], meta;
+    if(f.type==="pdf") meta=(f.pages?("共 "+f.pages+" 頁"):"PDF 文件");
+    else meta=f.lastOpened?fmtTime(f.lastOpened):(Math.round((f.size||0)/1024)+" KB");
+    var pct=Math.round((f.progress||0)*100);
+    return '<button class="bento card" data-open="'+f.id+'">'+
+      '<div class="card-row">'+
+        '<span class="badge '+b[1]+'">'+b[0]+'</span>'+
+        '<div class="card-mid"><div class="card-name">'+escapeHtml(f.name)+'</div><div class="card-meta">'+meta+'</div></div>'+
+        (pct>0?'<span class="pct">'+pct+'%</span>':'')+
+      '</div>'+
+      (pct>0?'<div class="prog"><i style="width:'+pct+'%"></i></div>':'')+
+    '</button>';
+  }
+  function renderHome(){
+    allFiles().then(function(files){
+      // recent
+      var recent=files.filter(function(f){return f.lastOpened;}).sort(function(a,b){return b.lastOpened-a.lastOpened;}).slice(0,3);
+      var rl=$("recentList");
+      if(recent.length){ rl.innerHTML=recent.map(cardHtml).join(""); $("recentSec").style.display=""; $("greet").textContent="歡迎回來,挑一份文件繼續閱讀吧。"; }
+      else if(files.length){ $("recentSec").style.display="none"; $("greet").textContent="你的書庫已就緒,從下方分類開始閱讀。"; }
+      else { rl.innerHTML='<div class="empty">還沒有文件 — 點下方導入你的第一份檔案。</div>'; $("recentSec").style.display=""; $("greet").textContent="歡迎使用,先導入一份文件吧。"; }
+      // counts
+      ["pdf","md","txt","code"].forEach(function(c){
+        var n=files.filter(function(f){return f.type===c;}).length;
+        document.querySelector('[data-count="'+c+'"]').textContent=n+" 份文件";
+      });
+      bindOpen(rl);
+    });
+  }
+  function bindOpen(container){
+    container.querySelectorAll("[data-open]").forEach(function(el){
+      el.addEventListener("click",function(){ openFile(el.getAttribute("data-open")); });
+    });
+  }
+
+  /* ---------- 分類清單 ---------- */
+  document.querySelectorAll("[data-cat]").forEach(function(b){
+    b.addEventListener("click",function(){ openCategory(b.getAttribute("data-cat")); });
+  });
+  function openCategory(cat){
+    allFiles().then(function(files){
+      var items=files.filter(function(f){return f.type===cat;}).sort(function(a,b){return (b.lastOpened||b.addedAt)-(a.lastOpened||a.addedAt);});
+      $("listTitle").textContent=CATNAME[cat];
+      var box=$("listItems");
+      box.innerHTML=items.length?items.map(cardHtml).join(""):'<div class="empty">這個分類還沒有文件。</div>';
+      bindOpen(box);
+      show("list");
+    });
+  }
+  $("listBack").addEventListener("click",function(){ show("home"); renderHome(); });
+
+  /* ---------- 閱讀器 ---------- */
+  var current=null, saveT=null, pdfTextMode=false;
+  var docScroll=$("docScroll"), docEl=$("doc");
+
+  $("rBack").addEventListener("click",function(){ closeReader(); });
+  $("rDelete").addEventListener("click",function(){
+    if(!current) return;
+    if(confirm("確定刪除「"+current.name+"」?此動作無法復原。")){
+      delFile(current.id).then(function(){ toast("已刪除"); closeReader(); });
+    }
+  });
+  function closeReader(){ saveProgress(true); current=null; docEl.innerHTML=""; docEl.className="doc"; show("home"); renderHome(); }
+
+  // 進度記憶
+  function onScroll(){
+    var max=docScroll.scrollHeight-docScroll.clientHeight;
+    var frac=max>0?docScroll.scrollTop/max:0;
+    $("rprog").style.width=(frac*100)+"%";
+    if(current){ current.progress=frac; clearTimeout(saveT); saveT=setTimeout(function(){ saveProgress(); },400); }
+  }
+  docScroll.addEventListener("scroll",onScroll,{passive:true});
+  function saveProgress(force){
+    if(!current) return;
+    current.lastOpened=Date.now();
+    putFile(current);
+  }
+  function restoreProgress(){
+    var frac=current.progress||0;
+    requestAnimationFrame(function(){
+      var max=docScroll.scrollHeight-docScroll.clientHeight;
+      docScroll.scrollTop=frac*max;
+      $("rprog").style.width=(frac*100)+"%";
+    });
+  }
+
+  // 單手:點擊中央切換沉浸模式
+  docScroll.addEventListener("click",function(e){
+    if(e.target.closest("a")) return;
+    var r=docScroll.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+    if(x>r.width*0.3 && x<r.width*0.7 && y>r.height*0.25 && y<r.height*0.75){
+      $("view-reader").classList.toggle("immersive");
+    }
+  });
+
+  function openFile(id){
+    getFile(id).then(function(f){
+      if(!f){ toast("找不到文件"); return; }
+      current=f; pdfTextMode=false;
+      $("rTitle").textContent=f.name;
+      $("rPdfMode").hidden=(f.type!=="pdf");
+      $("rPdfMode").textContent="⠿";
+      docEl.innerHTML=""; docEl.className="doc";
+      $("view-reader").classList.remove("immersive");
+      show("reader");
+      if(f.type==="md") renderMd(f.content);
+      else if(f.type==="code") renderCode(f.content,f.name);
+      else if(f.type==="txt") renderTxt(f.content);
+      else if(f.type==="pdf") renderPdf(f);
+      f.lastOpened=Date.now(); putFile(f);
+    });
+  }
+
+  function renderTxt(text){ docEl.className="doc plain serif"; docEl.textContent=text||""; restoreProgress(); }
+
+  function renderCode(text,name){
+    docEl.className="doc mono wrapcode";
+    var lang=(name.split(".").pop()||"").toLowerCase();
+    var pre=document.createElement("pre"), code=document.createElement("code");
+    code.textContent=text||""; code.className="language-"+lang; pre.appendChild(code); docEl.appendChild(pre);
+    if(window.hljs){ try{ hljs.highlightElement(code); }catch(e){} }
+    restoreProgress();
+  }
+
+  function renderMd(text){
+    docEl.className="doc serif";
+    var html;
+    if(window.marked){ try{ html=marked.parse(text||""); }catch(e){ html=mdFallback(text||""); } }
+    else html=mdFallback(text||"");
+    docEl.innerHTML=html;
+    if(window.hljs){ docEl.querySelectorAll("pre code").forEach(function(c){ try{ hljs.highlightElement(c); }catch(e){} }); }
+    restoreProgress();
+  }
+
+  // 內建 Markdown 後備解析(離線可用)
+  function mdInline(s){
+    s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,'<img alt="$1" src="$2">');
+    s=s.replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    s=s.replace(/`([^`]+)`/g,"<code>$1</code>");
+    s=s.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");
+    s=s.replace(/\*([^*]+)\*/g,"<em>$1</em>");
+    s=s.replace(/_([^_]+)_/g,"<em>$1</em>");
+    return s;
+  }
+  function mdFallback(src){
+    var lines=escapeHtml(src).replace(/\r\n?/g,"\n").split("\n"), out=[], i=0;
+    while(i<lines.length){
+      var line=lines[i], m;
+      if((m=line.match(/^```(.*)$/))){
+        var lang=m[1].trim(), buf=[]; i++;
+        while(i<lines.length && !/^```/.test(lines[i])){ buf.push(lines[i]); i++; }
+        i++; out.push('<pre><code'+(lang?' class="language-'+lang+'"':'')+'>'+buf.join("\n")+"</code></pre>"); continue;
+      }
+      if((m=line.match(/^(#{1,6})\s+(.*)$/))){ var lv=m[1].length; out.push("<h"+lv+">"+mdInline(m[2])+"</h"+lv+">"); i++; continue; }
+      if(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)){ out.push("<hr>"); i++; continue; }
+      if(/^>\s?/.test(line)){ var bq=[]; while(i<lines.length&&/^>\s?/.test(lines[i])){ bq.push(lines[i].replace(/^>\s?/,"")); i++; } out.push("<blockquote>"+mdInline(bq.join("<br>"))+"</blockquote>"); continue; }
+      if(/^\s*([-*+]|\d+\.)\s+/.test(line)){
+        var ordered=/^\s*\d+\./.test(line), li=[];
+        while(i<lines.length&&/^\s*([-*+]|\d+\.)\s+/.test(lines[i])){ li.push("<li>"+mdInline(lines[i].replace(/^\s*([-*+]|\d+\.)\s+/,""))+"</li>"); i++; }
+        out.push((ordered?"<ol>":"<ul>")+li.join("")+(ordered?"</ol>":"</ul>")); continue;
+      }
+      if(/^\s*$/.test(line)){ i++; continue; }
+      var p=[];
+      while(i<lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6}\s|>|```)/.test(lines[i]) && !/^\s*([-*+]|\d+\.)\s+/.test(lines[i])){ p.push(lines[i]); i++; }
+      out.push("<p>"+mdInline(p.join("<br>"))+"</p>");
+    }
+    return out.join("\n");
+  }
+
+  // PDF 渲染(懶載入)
+  $("rPdfMode").addEventListener("click",function(){
+    if(!current||current.type!=="pdf") return;
+    pdfTextMode=!pdfTextMode;
+    $("rPdfMode").textContent=pdfTextMode?"▦":"⠿";
+    renderPdf(current);
+  });
+  function renderPdf(f){
+    if(!window.pdfjsLib){ docEl.className="doc"; docEl.innerHTML='<div class="loadmsg">PDF 引擎尚未載入。<br>請確認裝置已連線後重新開啟此文件。</div>'; return; }
+    try{ pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; }catch(e){}
+    docEl.className="doc"; docEl.innerHTML='<div class="loadmsg">載入 PDF…</div>';
+    var data=f.content.slice(0); // 複製,避免被 worker 轉移
+    pdfjsLib.getDocument({data:new Uint8Array(data)}).promise.then(function(pdf){
+      f.pages=pdf.numPages;
+      if(pdfTextMode){ extractPdfText(pdf); return; }
+      docEl.innerHTML="";
+      var width=Math.min(docScroll.clientWidth-2,640);
+      var io=new IntersectionObserver(function(entries){
+        entries.forEach(function(en){
+          if(!en.isIntersecting) return;
+          var div=en.target; if(div.dataset.done) return; div.dataset.done="1"; io.unobserve(div);
+          var n=parseInt(div.dataset.page,10);
+          pdf.getPage(n).then(function(page){
+            var vp=page.getViewport({scale:1}), scale=width/vp.width, v2=page.getViewport({scale:scale});
+            var cv=document.createElement("canvas"); cv.width=v2.width; cv.height=v2.height; div.style.height="";
+            div.appendChild(cv); page.render({canvasContext:cv.getContext("2d"),viewport:v2});
+          });
+        });
+      },{root:docScroll,rootMargin:"600px"});
+      // 先用第一頁比例估算佔位高度
+      pdf.getPage(1).then(function(p1){
+        var vp=p1.getViewport({scale:1}), estH=(width/vp.width)*vp.height;
+        for(var n=1;n<=pdf.numPages;n++){
+          var d=document.createElement("div"); d.className="pdf-page"; d.dataset.page=n; d.style.height=estH+"px"; d.style.width=width+"px";
+          docEl.appendChild(d); io.observe(d);
+        }
+        restoreProgress();
+      });
+    }).catch(function(){
+      docEl.className="doc"; docEl.innerHTML='<div class="loadmsg">無法開啟此 PDF。</div>';
+    });
+  }
+  function extractPdfText(pdf){
+    docEl.className="doc plain serif"; docEl.textContent="提取文字中…";
+    var parts=[], n=1;
+    function next(){
+      if(n>pdf.numPages){ docEl.textContent=parts.join("\n\n"); restoreProgress(); return; }
+      pdf.getPage(n).then(function(p){ return p.getTextContent(); }).then(function(tc){
+        parts.push(tc.items.map(function(it){return it.str;}).join(" ")); n++; next();
+      }).catch(function(){ n++; next(); });
+    }
+    next();
+  }
+
+  /* ---------- 啟動 ---------- */
+  openDB().then(function(){
+    return Promise.all([getMeta("theme"),getMeta("fontSize")]);
+  }).then(function(r){
+    applyTheme(r[0]||"paper");
+    fontSize=r[1]||18; applyFs();
+    renderHome();
+  });
+
+})();
+</script>
+</body>
+</html>
